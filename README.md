@@ -73,7 +73,7 @@ The extension is written for Minecraft 1.8.9 and is output with the `.meowtils` 
 
 ## Notes
 
-- This is still a work in progress, I will be pushing updates for legit scaffold, scaffold, NoSlow and autoblock at some point whenever I get the time to do it.
+- This is still a work in progress, I will be pushing updates for legit scaffold, scaffold, NoSlow and autoblock at some point, Aim Snap is practically useless right now as it false flags pretty frequently.
 - This is a client-side heuristic tool; it does not enforce punishments on a server.
 - Packet visibility, latency, entity behavior, and server implementations can produce false positives or false negatives.
 - Flags should be treated as indicators for review, not definitive proof of cheating.
