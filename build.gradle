@@ -1,0 +1,55 @@
+/*
+This is a very basic build.gradle that is very similar to what you would have for a typical Forge mod,
+you can edit this however you want or create your own updated project with your own preferences.
+ */
+buildscript {
+    repositories {
+        mavenCentral()
+        maven {
+            name = "forge"
+            url = 'https://maven.minecraftforge.net/'
+        }
+    }
+    dependencies {
+        classpath 'net.minecraftforge.gradle:ForgeGradle:2.1-SNAPSHOT'
+
+        // Meowtils already uses JNA, you can use it too if needed.
+        // https://github.com/java-native-access/jna
+        classpath "net.java.dev.jna:jna:5.13.0"
+    }
+}
+apply plugin: 'net.minecraftforge.gradle.forge'
+
+version = "1.3" // This is the version, you should change it when updating your Extension
+archivesBaseName = "BetterAntiCheat" // This is the name of the file, you should change it to something relevant
+group = "meowtils.extension"
+
+/*
+This is the file extension, it will be .meowtils instead of .jar.
+You can read more about it here: docs.tatp.wtf/extensions/introduction
+ */
+jar {
+    extension = "meowtils"
+}
+
+// Java 8, you can change this if wanted
+sourceCompatibility = 1.8
+targetCompatibility = 1.8
+
+minecraft {
+    version = "1.8.9-11.15.1.2318-1.8.9"
+    mappings = "stable_22"
+    makeObfSourceJar = false
+}
+
+/*
+You need to add Meowtils jar as a library, this can be done by;
+1. Download Meowtils: tatp.wtf/download or github.com/femboytatp/meowtils/releases
+2. Add the jar to the libs folder at root
+3. Reload project if needed
+
+Guide: docs.tatp.wtf/extensions/setup
+ */
+dependencies {
+    compileOnly files('libs/meowtils.jar')
+}
