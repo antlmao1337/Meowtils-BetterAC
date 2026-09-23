@@ -2,6 +2,8 @@
 
 A client-side Meowtils extension for Minecraft 1.8.9 that provides heuristic anti-cheat checks against nearby players.
 
+See [CHANGELOG.md](CHANGELOG.md) for a readable history of changes. GitHub's commit history shows the exact code diff for each update.
+
 BetterAC watches client-visible movement, rotations, swings, block placements, and entity packets. It assigns violation levels and reports repeated patterns locally through Meowtils.
 
 ## Features
@@ -82,3 +84,5 @@ The extension is written for Minecraft 1.8.9 and is output with the `.meowtils` 
 
 Developed as a focused client-side anti-cheat extension for Meowtils and Minecraft 1.8.9.
 For questions, problems, or suggestions, please use the repository's issue tracker.
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the commit and pull-request format.
