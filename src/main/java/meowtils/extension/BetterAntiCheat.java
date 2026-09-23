@@ -6,6 +6,7 @@ import net.minecraft.entity.Entity;
 import net.minecraft.entity.player.EntityPlayer;
 import net.minecraft.item.ItemBlock;
 import net.minecraft.item.ItemStack;
+import net.minecraft.item.ItemSword;
 import net.minecraft.network.Packet;
 import net.minecraft.network.play.server.S0BPacketAnimation;
 import net.minecraft.network.play.server.S14PacketEntity;
@@ -47,19 +48,26 @@ public class BetterAntiCheat extends Extension {
     @Config public boolean debug = false;
     @Config public boolean flagSound = true;
     @Config public boolean ignoreBots = true;
-    @Config public int vlThreshold = 10;
+    @Config public int vlThreshold = 12;
 
+    // Combat
     @Config public boolean checkKillaura = true;
+    @Config public boolean checkKillauraSnap = true;
+    @Config public boolean checkKillauraConsistency = true;
     @Config public boolean checkMultiAura = true;
     @Config public boolean checkAutoBlock = true;
     @Config public boolean checkNoSlow = true;
     @Config public boolean checkAimSnap = true;
-    @Config public boolean checkScaffold = true;
-    @Config public boolean checkLegitScaffold = true;
 
-    @Config public double maxAngle = 75.0;
-    @Config public int multiAuraTicks = 4;
-    @Config public double snapThreshold = 35.0;
+    // Scaffold (split toggles — only Telly on by default)
+    @Config public boolean checkScaffoldPlaceRate = false;
+    @Config public boolean checkScaffoldSnap = false;
+    @Config public boolean checkScaffoldTelly = true;
+    @Config public boolean checkLegitScaffold = false;
+
+    @Config public double maxAngle = 90.0;
+    @Config public int multiAuraTicks = 3;
+    @Config public double snapThreshold = 55.0;
 
     private final Map<UUID, PlayerData> dataMap = new ConcurrentHashMap<UUID, PlayerData>();
     private int tickCounter = 0;
@@ -74,18 +82,22 @@ public class BetterAntiCheat extends Extension {
 
         expand("Checks", e -> {
             e.check("Killaura Angle", "checkKillaura");
+            e.check("Killaura Snap-Hit", "checkKillauraSnap");
+            e.check("Killaura Consistency", "checkKillauraConsistency");
             e.check("MultiAura", "checkMultiAura");
             e.check("AutoBlock", "checkAutoBlock");
             e.check("NoSlow", "checkNoSlow");
             e.check("Aim Snap", "checkAimSnap");
-            e.check("Scaffold", "checkScaffold");
+            e.check("Scaffold Place Rate", "checkScaffoldPlaceRate");
+            e.check("Scaffold Snap", "checkScaffoldSnap");
+            e.check("Scaffold Telly", "checkScaffoldTelly");
             e.check("Legit Scaffold", "checkLegitScaffold");
         });
 
         expand("Thresholds", e -> {
-            e.slider("Max Angle", 40, 120, 1, "°", "maxAngle", double.class);
+            e.slider("Max Angle", 50, 130, 1, "°", "maxAngle", double.class);
             e.slider("MultiAura Ticks", 2, 8, 1, null, "multiAuraTicks", int.class);
-            e.slider("Snap Threshold", 20, 60, 1, "°", "snapThreshold", double.class);
+            e.slider("Snap Threshold", 30, 90, 1, "°", "snapThreshold", double.class);
         });
     }
 
@@ -138,10 +150,12 @@ public class BetterAntiCheat extends Extension {
             data.tick(player);
 
             if (checkNoSlow) checkNoSlow(data);
-            if (checkScaffold) checkScaffold(data);
+            if (checkScaffoldPlaceRate || checkScaffoldSnap || checkScaffoldTelly) {
+                checkScaffold(data);
+            }
             if (checkLegitScaffold) checkLegitScaffold(data);
 
-            if (data.vl > 0 && tickCounter % 20 == 0) {
+            if (data.vl > 0 && tickCounter % 15 == 0) {
                 data.vl = Math.max(0, data.vl - 1);
             }
         }
@@ -162,9 +176,7 @@ public class BetterAntiCheat extends Extension {
             if (changes != null) {
                 for (int i = 0; i < changes.length; i++) {
                     S22PacketMultiBlockChange.BlockUpdateData c = changes[i];
-                    if (c != null) {
-                        handleBlockUpdate(c.getPos(), c.getBlockState());
-                    }
+                    if (c != null) handleBlockUpdate(c.getPos(), c.getBlockState());
                 }
             }
         } else if (packet instanceof S19PacketEntityHeadLook) {
@@ -202,11 +214,13 @@ public class BetterAntiCheat extends Extension {
                     data.onSwing();
 
                     if (data.inScaffoldContext()) {
-                        if (checkScaffold) {
+                        if (checkScaffoldPlaceRate || checkScaffoldSnap || checkScaffoldTelly) {
                             data.notePlaceSwing(tickCounter);
                         }
                     } else {
                         if (checkKillaura) checkKillauraAngle(data);
+                        if (checkKillauraSnap) checkKillauraSnapHit(data);
+                        if (checkKillauraConsistency) checkKillauraConsistency(data);
                         if (checkAimSnap) checkAimSnap(data);
                         if (checkMultiAura) checkMultiAura(data);
                         if (checkAutoBlock) checkAutoBlock(data);
@@ -250,12 +264,29 @@ public class BetterAntiCheat extends Extension {
         data.onPlacedBlock(pos, tickCounter);
     }
 
+    // ===================== COMBAT =====================
+
+    private double aimAngleTo(PlayerData data, EntityPlayer target) {
+        EntityPlayer attacker = data.player;
+        double dx = target.posX - attacker.posX;
+        double dy = (target.posY + target.getEyeHeight()) - (attacker.posY + attacker.getEyeHeight());
+        double dz = target.posZ - attacker.posZ;
+
+        double distXZ = Math.sqrt(dx * dx + dz * dz);
+        float yawTo = (float) (Math.atan2(dz, dx) * 180.0 / Math.PI) - 90.0F;
+        float pitchTo = (float) -(Math.atan2(dy, distXZ) * 180.0 / Math.PI);
+
+        float yawDiff = MathHelper.wrapAngleTo180_float(data.headYaw - yawTo);
+        float pitchDiff = MathHelper.wrapAngleTo180_float(data.pitch - pitchTo);
+        return Math.sqrt(yawDiff * yawDiff + pitchDiff * pitchDiff);
+    }
+
     private void checkKillauraAngle(PlayerData data) {
         EntityPlayer attacker = data.player;
         if (attacker == null) return;
 
         EntityPlayer bestTarget = null;
-        double bestDist = 4.5;
+        double bestDist = 4.2;
 
         for (EntityPlayer other : mc.theWorld.playerEntities) {
             if (other == attacker || other == mc.thePlayer || other.isDead || isBot(other)) continue;
@@ -265,23 +296,54 @@ public class BetterAntiCheat extends Extension {
                 bestTarget = other;
             }
         }
-
         if (bestTarget == null) return;
 
-        double dx = bestTarget.posX - attacker.posX;
-        double dy = (bestTarget.posY + bestTarget.getEyeHeight()) - (attacker.posY + attacker.getEyeHeight());
-        double dz = bestTarget.posZ - attacker.posZ;
+        double angle = aimAngleTo(data, bestTarget);
+        data.lastCombatAngle = (float) angle;
+        data.lastCombatSwingTick = tickCounter;
+        data.recentCombatSwings++;
 
-        double distXZ = Math.sqrt(dx * dx + dz * dz);
-        float yawToTarget = (float) (Math.atan2(dz, dx) * 180.0 / Math.PI) - 90.0F;
-        float pitchToTarget = (float) -(Math.atan2(dy, distXZ) * 180.0 / Math.PI);
+        // Pitch outside normal human range
+        if (data.pitch < -90.0F || data.pitch > 90.0F) {
+            data.addVL(4, "Killaura-Pitch", String.format("%.1f", data.pitch));
+        }
 
-        float yawDiff = MathHelper.wrapAngleTo180_float(data.headYaw - yawToTarget);
-        float pitchDiff = MathHelper.wrapAngleTo180_float(data.pitch - pitchToTarget);
-        double angle = Math.sqrt(yawDiff * yawDiff + pitchDiff * pitchDiff);
-
-        if (angle > maxAngle && bestDist > 1.2) {
+        if (angle > maxAngle && bestDist > 1.5 && bestDist < 4.0) {
             data.addVL(3, "Killaura-Angle", String.format("%.1f°", angle));
+        }
+
+        if (angle < 8.0 && bestDist < 3.8) {
+            data.lowAngleHits++;
+        }
+    }
+
+    /** Large rotation immediately followed by a combat swing */
+    private void checkKillauraSnapHit(PlayerData data) {
+        if (data.yawHistory.size() < 2) return;
+        if (!data.hasNearbyCombatTarget()) return;
+
+        float last = data.yawHistory.get(data.yawHistory.size() - 1);
+        float prev = data.yawHistory.get(data.yawHistory.size() - 2);
+        float delta = Math.abs(MathHelper.wrapAngleTo180_float(last - prev));
+
+        if (delta > 45.0F && data.swingsThisTick > 0) {
+            data.addVL(3, "Killaura-SnapHit", String.format("%.1f°", delta));
+        }
+    }
+
+    /**
+     * Near-zero aim angles with high combat swing rate (lock-on aura pattern).
+     */
+    private void checkKillauraConsistency(PlayerData data) {
+        if (tickCounter % 20 == 0) {
+            data.recentCombatSwings = Math.max(0, data.recentCombatSwings - 2);
+            data.lowAngleHits = Math.max(0, data.lowAngleHits - 1);
+        }
+
+        if (data.recentCombatSwings >= 8 && data.lowAngleHits >= 5) {
+            data.addVL(4, "Killaura-Consistency", "lock-on " + data.lowAngleHits + "/" + data.recentCombatSwings);
+            data.lowAngleHits = Math.max(0, data.lowAngleHits - 3);
+            data.recentCombatSwings = Math.max(0, data.recentCombatSwings - 3);
         }
     }
 
@@ -298,75 +360,78 @@ public class BetterAntiCheat extends Extension {
             if (seen.add(st.entityId)) recentDistinct++;
         }
 
-        if (recentDistinct >= 2) {
-            data.addVL(4, "MultiAura", recentDistinct + " targets");
+        if (recentDistinct >= 3) {
+            data.addVL(5, "MultiAura", recentDistinct + " targets");
         }
     }
 
     private void checkAimSnap(PlayerData data) {
         if (data.inScaffoldContext()) return;
-        if (data.yawHistory.size() < 2) return;
+        if (data.yawHistory.size() < 3) return;
 
         float last = data.yawHistory.get(data.yawHistory.size() - 1);
         float prev = data.yawHistory.get(data.yawHistory.size() - 2);
         float delta = Math.abs(MathHelper.wrapAngleTo180_float(last - prev));
 
-        if (delta > snapThreshold) {
+        if (delta > snapThreshold && data.swingsThisTick > 0 && data.hasNearbyCombatTarget()) {
             data.addVL(2, "AimSnap", String.format("%.1f°", delta));
         }
     }
 
     private void checkAutoBlock(PlayerData data) {
-        if (data.isUsingItem && data.swingsThisTick > 0) {
-            data.addVL(3, "AutoBlock", null);
+        EntityPlayer p = data.player;
+        if (p == null) return;
+
+        ItemStack held = p.getHeldItem();
+        if (held == null || !(held.getItem() instanceof ItemSword)) {
+            data.swordSwingsWhileBlocking = 0;
+            return;
+        }
+
+        if (data.swingsThisTick > 0 && data.useItemTime > 8) {
+            data.swordSwingsWhileBlocking++;
+            if (data.swordSwingsWhileBlocking >= 3) {
+                data.addVL(3, "AutoBlock", "swing while blocked x" + data.swordSwingsWhileBlocking);
+            }
+        } else if (data.useItemTime == 0) {
+            data.swordSwingsWhileBlocking = Math.max(0, data.swordSwingsWhileBlocking - 1);
         }
     }
 
     private void checkNoSlow(PlayerData data) {
-        if (!data.isUsingItem) return;
-        double speed = Math.sqrt(data.deltaX * data.deltaX + data.deltaZ * data.deltaZ);
-        if (speed > 0.18 && data.useTicks > 3) {
-            data.addVL(2, "NoSlow", null);
+        EntityPlayer p = data.player;
+        if (p == null || p.isRiding()) return;
+        if (data.useItemTime <= 8) return;
+
+        double speedSq = data.deltaX * data.deltaX + data.deltaZ * data.deltaZ;
+        if (speedSq < 0.09) return;
+        if (data.moveLookDiff > 120.0F) return;
+
+        ItemStack held = p.getHeldItem();
+        boolean sword = held != null && held.getItem() instanceof ItemSword;
+
+        if (data.sprintTime > 8 && (sword || speedSq >= 0.12)) {
+            data.addVL(2, "NoSlow", String.format("%.2f", Math.sqrt(speedSq)));
         }
     }
+
+    // ===================== SCAFFOLD =====================
 
     private void checkScaffold(PlayerData data) {
         int places = data.placesLastSecond();
         int swings = data.placeSwingsLastSecond();
         boolean moving = data.movingForward;
-        boolean holdingBlock = data.holdingBlock;
-        boolean lookingDown = data.pitch > 50.0F;
 
-        if (places >= 8 && moving) {
+        if (checkScaffoldPlaceRate && places >= 11 && moving) {
             data.addVL(4, "Scaffold", "place rate " + places + "/s");
         }
 
-        if (data.snapPlaces >= 3 && (places >= 3 || swings >= 4) && moving) {
+        if (checkScaffoldSnap && data.snapPlaces >= 4 && places >= 4 && moving) {
             data.addVL(4, "Scaffold", "snap-to-place x" + data.snapPlaces);
         }
 
-        if (places >= 5 && moving && lookingDown && data.avgYawChange < 2.2F && data.avgPitchChange < 2.5F) {
-            data.addVL(3, "Scaffold", "locked aim while placing");
-        }
-
-        if (places >= 4 && moving && data.moveLookDiff > 110.0F && lookingDown) {
-            data.addVL(3, "Scaffold", "backwards look");
-        }
-
-        if (data.tellyBounces >= 2 && (places >= 3 || swings >= 4) && moving) {
-            data.addVL(4, "Scaffold", "telly pitch");
-        }
-
-        if (data.sameYPlaces >= 6 && moving && holdingBlock) {
-            data.addVL(3, "Scaffold", "keepY " + data.sameYPlaces);
-        }
-
-        if (places >= 4 && data.rising && lookingDown && data.pitch > 70.0F) {
-            data.addVL(3, "Scaffold", "tower");
-        }
-
-        if (places < 2 && swings >= 8 && moving && lookingDown && holdingBlock && data.avgYawChange < 3.0F) {
-            data.addVL(3, "Scaffold", "place-swing spam");
+        if (checkScaffoldTelly && data.tellyBounces >= 3 && (places >= 4 || swings >= 5) && moving) {
+            data.addVL(5, "Scaffold", "telly pitch");
         }
 
         if (tickCounter % 20 == 0) {
@@ -378,25 +443,26 @@ public class BetterAntiCheat extends Extension {
 
     private void checkLegitScaffold(PlayerData data) {
         int places = data.placesLastSecond();
-        if (places >= 4 && data.avgYawChange < 1.4F && data.movingForward && data.accuratePlaces >= 3 && data.pitch > 45.0F) {
+        if (places >= 7
+                && data.avgYawChange < 0.9F
+                && data.movingForward
+                && data.accuratePlaces >= 5
+                && data.pitch > 55.0F) {
             data.addVL(2, "LegitScaffold", "assist bridging");
         }
     }
 
+    // ===================== DATA =====================
+
     private class PlayerData {
         EntityPlayer player;
-        float headYaw;
-        float pitch;
-        float lastHeadYaw;
-        float lastPitch;
-        double lastPosX;
-        double lastPosY;
-        double lastPosZ;
-        double deltaX;
-        double deltaY;
-        double deltaZ;
+        float headYaw, pitch, lastHeadYaw, lastPitch;
+        double lastPosX, lastPosY, lastPosZ;
+        double deltaX, deltaY, deltaZ;
         boolean isUsingItem;
-        int useTicks;
+        int useItemTime;
+        int sprintTime;
+        int swordSwingsWhileBlocking;
         int swingsThisTick;
         boolean movingForward;
         boolean rising;
@@ -416,6 +482,12 @@ public class BetterAntiCheat extends Extension {
         int likelyShown;
         int confirmedShown;
         int regularShown;
+
+        // Combat consistency
+        int recentCombatSwings;
+        int lowAngleHits;
+        int lastCombatSwingTick = -999;
+        float lastCombatAngle = 999f;
 
         final Map<String, Integer> flagCounts = new HashMap<String, Integer>();
         final List<Float> yawHistory = new ArrayList<Float>(8);
@@ -449,14 +521,21 @@ public class BetterAntiCheat extends Extension {
             ItemStack held = p.getHeldItem();
             holdingBlock = held != null && held.getItem() instanceof ItemBlock;
 
+            isUsingItem = p.isUsingItem();
+            if (isUsingItem) useItemTime++;
+            else {
+                useItemTime = 0;
+                swordSwingsWhileBlocking = 0;
+            }
+
+            if (p.isSprinting()) sprintTime++;
+            else sprintTime = 0;
+
             this.headYaw = p.rotationYawHead;
             this.pitch = p.rotationPitch;
 
             float moveYaw = speed > 0.01 ? (float) (Math.atan2(deltaZ, deltaX) * 180.0 / Math.PI) - 90.0F : headYaw;
             moveLookDiff = Math.abs(MathHelper.wrapAngleTo180_float(headYaw - moveYaw));
-
-            if (isUsingItem) useTicks++;
-            else useTicks = 0;
 
             prune(placeTicks, 20);
             prune(placeSwingTicks, 20);
