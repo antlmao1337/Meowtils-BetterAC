@@ -9,10 +9,12 @@ BetterAC watches client-visible movement, rotations, swings, block placements, a
 ## Features
 
 - **Combat checks**
-  - Killaura angle heuristics
-  - MultiAura target switching
+  - Killaura: swings while a nearby player takes damage and the crosshair is nowhere near them
+  - Killaura snap-hit: snap onto a hitbox, then restore the old rotation
+  - Killaura consistency: aim error that barely moves while the target is moving
+  - MultiAura: several hitboxes pass under the crosshair in a short window
   - AutoBlock behavior
-  - Aim-snap detection
+  - Aim snap: repeated snaps that land on a player's hitbox and stay there
 
 - **Movement checks**
   - NoSlow movement while using items
@@ -30,11 +32,11 @@ BetterAC watches client-visible movement, rotations, swings, block placements, a
 
 | Check | Purpose |
 |-------|---------|
-| Killaura Angle | Compares attack direction with nearby targets |
-| MultiAura | Tracks distinct targets attacked in a short window |
-| AutoBlock | Flags swings while an item is being used |
+| Killaura Angle | Swings lined up with a nearby hurt player while the crosshair misses them, and nobody else swung |
+| MultiAura | Distinct players whose hitboxes sit under the crosshair in a short window |
+| AutoBlock | Flags sword swings while an item is being used |
 | NoSlow | Looks for unusually high movement while using an item |
-| Aim Snap | Detects large head-rotation changes around attacks |
+| Aim Snap | Repeated one-step snaps that land on a hitbox and stay there |
 | Scaffold | Scores rapid, aligned, or repeated block placement patterns |
 | Legit Scaffold | Detects repeated assisted-bridging indicators |
 
@@ -51,7 +53,7 @@ The extension exposes its settings through the Meowtils module configuration:
 
 - Enable or disable individual checks
 - Change the violation-level threshold
-- Tune angle, snap, and timing thresholds
+- Tune angle, snap, on-target, and timing thresholds
 - Toggle debug messages and flag sounds
 - Ignore or include likely NPC/bot entities
 
