@@ -32,13 +32,26 @@ BetterAC watches client-visible movement, rotations, swings, block placements, a
 
 | Check | Purpose |
 |-------|---------|
-| Killaura Angle | Swings lined up with a nearby hurt player while the crosshair misses them, and nobody else swung |
-| MultiAura | Distinct players whose hitboxes sit under the crosshair in a short window |
+| Killaura Angle | Flags repeated swings toward a nearby hurt player while the crosshair is outside the configured max angle |
+| Killaura Pitch | Flags repeated invalid or out-of-range pitch values in combat rotation data |
+| Killaura Snap-Hit | Detects a snap onto a target hitbox followed by a restore to the previous rotation |
+| Killaura Consistency | Detects unusually stable aim error while the target is moving |
+| MultiAura | Detects distinct target hitboxes passing under the crosshair in short and medium windows |
 | AutoBlock | Flags sword swings while an item is being used |
 | NoSlow | Looks for unusually high movement while using an item |
-| Aim Snap | Repeated one-step snaps that land on a hitbox and stay there |
-| Scaffold | Scores rapid, aligned, or repeated block placement patterns |
+| Aim Snap | Detects repeated one-step snaps that land on a hitbox and stay there |
+| Scaffold | Scores rapid placement, snap-to-place rotation, and telly-bridging pitch patterns |
 | Legit Scaffold | Detects repeated assisted-bridging indicators |
+
+### Threshold options
+
+| Option | Range | Default | Used by |
+|--------|-------|---------|---------|
+| VL Threshold | 4–20 | 7 | All checks; violation level required before a chat flag |
+| Max Angle | 50–130° | 90° | Killaura Angle and target visibility checks |
+| MultiAura Ticks | 2–8 | 3 | MultiAura short-window target switching |
+| Snap Threshold | 30–90° | 45° | Killaura Snap-Hit, Aim Snap, and rotation snap heuristics |
+| On-Target Angle | 18–48° | 36° | Hitbox alignment used by snap and combat checks |
 
 ## Installation
 
