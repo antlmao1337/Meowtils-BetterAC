@@ -58,7 +58,7 @@ BetterAC watches client-visible movement, rotations, swings, block placements, a
 1. Install Meowtils for Minecraft 1.8.9.
 2. Build the extension or download a release when one is available.
 3. Place the resulting `.meowtils` file in the Meowtils extensions directory.
-4. Restart the client and enable **BetterAntiCheat** in Meowtils.
+4. Reload Meowtils and Enable the BetterAntiCheat Extension.
 
 ## Configuration
 
